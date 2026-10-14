@@ -1,0 +1,4 @@
+geoip2
+pandas
+plotly
+pycountry
