@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 
 import argparse
@@ -11,7 +10,10 @@ from pathlib import Path
 import geoip2.database
 import pandas as pd
 import plotly.express as px
+from plotly.io import to_html
 import pycountry
+import webbrowser
+    
 
 
 def open_log(filename):
@@ -319,10 +321,8 @@ def analyse_logs(
         print("No country data available to plot.")
         return
 
-    # ---------------------------------------------------------
-    # Interactive world heat map
-    # ---------------------------------------------------------
-    fig = px.choropleth(
+    # Create the interactive world map
+    map_fig = px.choropleth(
         country_df,
         locations="iso3",
         color="requests",
@@ -344,14 +344,114 @@ def analyse_logs(
         },
     )
 
-    fig.update_layout(
+    map_fig.update_layout(
         template="plotly_dark",
-        geo={"showframe": False, "showcoastlines": True},
+        geo={
+            "showframe": False,
+            "showcoastlines": True,
+            "center": {"lat": 54, "lon": 15},
+            "projection_scale": 1.6,
+        },
+        height=700,
+        dragmode="pan",
     )
 
+    # Create the Top 10 countries bar chart
+    top_countries = country_df.nlargest(10, "requests").sort_values(
+        "requests", ascending=True
+    )
+
+    bar_fig = px.bar(
+        top_countries,
+        x="requests",
+        y="country",
+        orientation="h",
+        text="requests",
+        hover_data={
+            "percentage": ":.2f",
+            "bandwidth_MB": True,
+        },
+        title="Top 10 Countries by Request Count",
+        labels={
+            "requests": "Requests",
+            "country": "Country",
+            "percentage": "Share of all requests (%)",
+            "bandwidth_MB": "Bandwidth (MiB)",
+        },
+    )
+
+    bar_fig.update_traces(
+        texttemplate="%{text:,}",
+        textposition="outside",
+    )
+
+    bar_fig.update_layout(
+        template="plotly_dark",
+        yaxis={"categoryorder": "total ascending"},
+        height=500,
+    )
+
+    # Write both interactive figures into one HTML page
     output = "squid_country_heatmap.html"
-    fig.write_html(output, auto_open=True)
-    print(f"\nHeat map saved to {output}")
+
+    with open(output, "w", encoding="utf-8") as html_file:
+        html_file.write("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Squid Proxy Traffic Analysis</title>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 20px;
+                    background: #111111;
+                    color: white;
+                    font-family: Arial, sans-serif;
+                }
+                h1 {
+                    text-align: center;
+                }
+                .chart {
+                    max-width: 1400px;
+                    margin: 0 auto 30px auto;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>Squid Proxy Traffic Analysis</h1>
+            <div class="chart">
+        """)
+
+        html_file.write(
+            to_html(
+                map_fig,
+                full_html=False,
+                include_plotlyjs="cdn",
+            )
+        )
+
+        html_file.write("""
+            </div>
+            <div class="chart">
+        """)
+
+        html_file.write(
+            to_html(
+                bar_fig,
+                full_html=False,
+                include_plotlyjs=False,
+            )
+        )
+
+        html_file.write("""
+            </div>
+        </body>
+        </html>
+        """)
+
+    print(f"\nHeat map and country bar chart saved to {output}")
+    webbrowser.open(Path(output).resolve().as_uri())
 
 
 def main():
@@ -441,4 +541,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
